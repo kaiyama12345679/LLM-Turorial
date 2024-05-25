@@ -12,6 +12,7 @@ import os
 from dotenv import load_dotenv
 import wandb
 import time
+from discord_webhook import send_discord_webhook
 
 load_dotenv()
 if os.getenv("WANDB_API_KEY") is None:
@@ -74,14 +75,15 @@ def train_ddp(batch_size, epochs, learning_rate, warmup_steps, run_name):
     # hhmm形式にフォーマット
     hhmm = "{:02d}{:02d}".format(hour, minute)
 
-    save_path = f"./output/{run_name}-{hhmm}"
+    save_path = f"./output/{run_name}-{hhmm}.pt"
     set_seed(42)
 
     deepspeed_plugin = deepspeed.DeepSpeedPlugin(zero_stage=2, gradient_accumulation_steps=1, offload_param_device='cpu')
     accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin, log_with="wandb")
     accelerator.init_trackers(
         project_name="llm-train-tutorial",
-        init_kwargs={"wandb": {"group": run_name}}
+        init_kwargs={"wandb": {"group": run_name, "name": hhmm}},
+        config={"model_name": MODEL_NAME,"batch_size": batch_size, "epochs": epochs, "learning_rate": learning_rate, "warmup_steps": warmup_steps},
     )
 
     if accelerator.is_main_process:
@@ -96,7 +98,6 @@ def train_ddp(batch_size, epochs, learning_rate, warmup_steps, run_name):
     model, optimizer, train_data_loader, eval_data_loader, test_data_loader, scheduler = accelerator.prepare(
         model, optimizer, train_data_loader, eval_data_loader, test_data_loader, scheduler
     )
-    accelerator.log({"learning_rate": learning_rate, "warmup_steps": warmup_steps, "batch_size": batch_size, "epochs": epochs})
     for epoch_i in range(epochs):
         if accelerator.is_main_process:
           print("")
@@ -156,8 +157,8 @@ def train_ddp(batch_size, epochs, learning_rate, warmup_steps, run_name):
     if accelerator.is_main_process:
         print("")
         print("Training complete!")
-        if not os.path.exists(save_path):
-            os.makedirs(save_path)
+        if not os.path.exists("./output/"):
+            os.makedirs("./output/")
         
         unwrapped_model = accelerator.unwrap_model(model)
         unwrapped_model.save_pretrained(save_path, save_function=accelerator.save, state_dict=accelerator.get_state_dict(model))
@@ -186,7 +187,15 @@ if __name__ == "__main__":
     parser.add_argument("--warmup_steps", type=int, default=1e4, help="Warmup steps for training")
     parser.add_argument("--run_name", type=str, default="llm-ddp", help="Run name for wandb")
     args = parser.parse_args()
-    train_ddp(args.batch_size, args.epochs, args.learning_rate, args.warmup_steps, args.run_name)
+    send_discord_webhook(f"Start training with batch_size: {args.batch_size}, epochs: {args.epochs}, learning_rate: {args.learning_rate}, warmup_steps: {args.warmup_steps}, run_name: {args.run_name}")
+    try:
+        train_ddp(args.batch_size, args.epochs, args.learning_rate, args.warmup_steps, args.run_name)
+    except Exception as e:
+        send_discord_webhook(f"Error occured during training: {str(e)}")
+        raise e
+    else:
+        send_discord_webhook("Training completed successfully")
+    
 
         
 

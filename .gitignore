@@ -1,1 +1,6 @@
 .env
+*.sif
+outputs/
+wandb/
+*.out
+*.err
