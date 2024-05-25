@@ -1,0 +1,1 @@
+cd $EXP_PATH && accelerate launch llm-ddp-train.py

@@ -4,3 +4,5 @@ outputs/
 wandb/
 *.out
 *.err
+__pycache__/
+output/

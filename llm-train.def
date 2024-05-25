@@ -7,4 +7,4 @@ From: nvcr.io/nvidia/pytorch:23.07-py3
     apt-get update -y
 
     pip install setuptools
-    pip install wandb transformers deepspeed openai PyYAML accelerate datasets einops evaluate peft protobuf scikit-learn scipy sentencepiece fire mpi4py python-dotenv
+    pip install wandb transformers deepspeed openai PyYAML accelerate datasets einops evaluate peft protobuf scikit-learn scipy sentencepiece fire mpi4py python-dotenv psutil

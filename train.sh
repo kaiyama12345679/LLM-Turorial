@@ -10,4 +10,4 @@
 source /etc/profile.d/modules.sh
 module load singularitypro
 export EXP_PATH=$(pwd)
-singularity exec --nv llm-train.sif -c "cd $EXP_PATH && accelerate launch llm-ddp-train.py"
+singularity exec --nv --bind $EXP_PATH:$EXP_PATH llm-train.sif bash command.sh
