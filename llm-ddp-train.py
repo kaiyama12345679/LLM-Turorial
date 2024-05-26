@@ -121,7 +121,7 @@ def train_ddp(batch_size, epochs, learning_rate, warmup_steps, run_name):
             for step, batch in enumerate(train_data_loader):
                 model.train()
                 batch = {k: v.to("cuda") for k, v in batch.items()}
-                outputs = model(**batch, labels=batch["labels"])
+                outputs = model(**batch)
                 loss = outputs.loss
                 total_loss += loss.item()
                 accelerator.backward(loss)
@@ -160,7 +160,7 @@ def train_ddp(batch_size, epochs, learning_rate, warmup_steps, run_name):
                     total_eval_loss = 0
                     for batch in eval_data_loader:
                         batch = {k: v.to("cuda") for k, v in batch.items()}
-                        outputs = model(**batch, labels=batch["labels"])
+                        outputs = model(**batch)
                         loss = outputs.loss
                         total_eval_loss += loss.item()
                     avg_eval_loss = total_eval_loss / len(eval_data_loader)
@@ -193,7 +193,7 @@ def train_ddp(batch_size, epochs, learning_rate, warmup_steps, run_name):
         model.eval()
         for batch in test_data_loader:
             batch = {k: v.to("cuda") for k, v in batch.items()}
-            outputs = model(**batch, labels=batch["labels"])
+            outputs = model(**batch)
             loss = outputs.loss
             total_test_loss += loss.item()
         avg_test_loss = total_test_loss / len(test_data_loader)
