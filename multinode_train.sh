@@ -16,7 +16,7 @@ export MASTER_IP=$(dig +short $MASTER_HOST)
 export HOST0=$(cat ${SGE_JOB_HOSTLIST} | head -n 1 | tail -n 1)
 export HOST1=$(cat ${SGE_JOB_HOSTLIST} | head -n 2 | tail -n 1)
 export HOST2=$(cat ${SGE_JOB_HOSTLIST} | head -n 3 | tail -n 1)
-export HOST3=$(cat ${SGE_JOB_HOSTLIST} | head -n 4 | head -n 1)
+export HOST3=$(cat ${SGE_JOB_HOSTLIST} | head -n 4 | tail -n 1)
 export MASTER_PORT=29500
 export EXP_PATH=$(pwd)
 
