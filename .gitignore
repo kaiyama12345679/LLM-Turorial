@@ -6,3 +6,4 @@ wandb/
 *.err
 __pycache__/
 output/
+hostfile

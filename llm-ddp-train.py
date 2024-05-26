@@ -21,7 +21,7 @@ if os.getenv("WANDB_API_KEY") is None:
 wandb.login()
 
 MODEL_NAME = "gpt2"
-PROMPT = "The United States of America"
+PROMPT = "Once upon a time"
 def set_seed(seed):
     torch.manual_seed(seed)
     if torch.cuda.is_available():
@@ -31,8 +31,19 @@ def set_seed(seed):
 
 def set_dataloder(tokenizer, batch_size=4):
     dataset = load_dataset("wikitext", "wikitext-2-raw-v1")
-    dataset = dataset.map(lambda x: tokenizer(x["text"], padding="max_length", truncation=True, max_length=200), batched=True)
-    dataset.set_format(type="torch", columns=["input_ids", "attention_mask"])
+
+    def tokenize_function_with_labels(examples):                            
+        inputs = tokenizer(                                                 # tokenization for text, set 'input_ids' and 'labels'
+            examples['text'], 
+            padding     = 'max_length', 
+            truncation  = True, 
+            max_length  = 512
+        )
+        inputs["labels"] = inputs["input_ids"].copy()                       # 'input_ids' as 'labels'
+        return inputs
+    
+    dataset = dataset.map(tokenize_function_with_labels, batched=True)
+    dataset.set_format(type="torch", columns=["input_ids", "attention_mask", "labels"])
     train_dataset = dataset["train"]
     print("Train dataset length: ", len(train_dataset))
     eval_dataset = dataset["validation"]
@@ -47,8 +58,7 @@ def set_dataloder(tokenizer, batch_size=4):
 
 def set_model(tokenizer):
     config = GPT2Config.from_pretrained(MODEL_NAME, output_hidden_states=False)
-    model = GPT2LMHeadModel(config=config)
-    model.resize_token_embeddings(len(tokenizer))
+    model = GPT2LMHeadModel.from_pretrained(MODEL_NAME, config=config)
     return model
 
 
@@ -64,7 +74,8 @@ def format_time(elapsed):
 def train_ddp(batch_size, epochs, learning_rate, warmup_steps, run_name):
     # 現在の日時を取得
     now = datetime.now()
-    tokenizer = GPT2Tokenizer.from_pretrained(MODEL_NAME, bos_token='<|startoftext|>', eos_token='<|endoftext|>', pad_token='<|pad|>')
+    tokenizer = GPT2Tokenizer.from_pretrained(MODEL_NAME)
+    tokenizer.pad_token = tokenizer.eos_token
 
     # 時間と分を取得
     hour = now.hour
@@ -81,7 +92,7 @@ def train_ddp(batch_size, epochs, learning_rate, warmup_steps, run_name):
         accelerator = Accelerator(deepspeed_plugin=deepspeed_plugin, log_with="wandb")
         accelerator.init_trackers(
             project_name="llm-train-tutorial",
-            init_kwargs={"wandb": {"group": run_name, "name": run_name + hhmm}},
+            init_kwargs={"wandb": {"group": run_name, "name": MODEL_NAME + hhmm}},
             config={"model_name": MODEL_NAME,"batch_size": batch_size, "epochs": epochs, "learning_rate": learning_rate, "warmup_steps": warmup_steps},
         )
         table = []
@@ -110,7 +121,7 @@ def train_ddp(batch_size, epochs, learning_rate, warmup_steps, run_name):
             for step, batch in enumerate(train_data_loader):
                 model.train()
                 batch = {k: v.to("cuda") for k, v in batch.items()}
-                outputs = model(**batch, labels=batch["input_ids"])
+                outputs = model(**batch, labels=batch["labels"])
                 loss = outputs.loss
                 total_loss += loss.item()
                 accelerator.backward(loss)
@@ -130,8 +141,9 @@ def train_ddp(batch_size, epochs, learning_rate, warmup_steps, run_name):
                             tokenized_prompt = {k: v.to("cuda") for k, v in tokenized_prompt.items()}
                             sample_outputs = accelerator.unwrap_model(model).generate(
                                 **tokenized_prompt,
-                                max_length=200,
+                                max_length=512,
                                 num_return_sequences=1,
+                                pad_token_id=tokenizer.eos_token_id,
                                 temperature=1.0,
                                 top_k=50,
                                 do_sample=True,
@@ -148,7 +160,7 @@ def train_ddp(batch_size, epochs, learning_rate, warmup_steps, run_name):
                     total_eval_loss = 0
                     for batch in eval_data_loader:
                         batch = {k: v.to("cuda") for k, v in batch.items()}
-                        outputs = model(**batch, labels=batch["input_ids"])
+                        outputs = model(**batch, labels=batch["labels"])
                         loss = outputs.loss
                         total_eval_loss += loss.item()
                     avg_eval_loss = total_eval_loss / len(eval_data_loader)
@@ -181,7 +193,7 @@ def train_ddp(batch_size, epochs, learning_rate, warmup_steps, run_name):
         model.eval()
         for batch in test_data_loader:
             batch = {k: v.to("cuda") for k, v in batch.items()}
-            outputs = model(**batch, labels=batch["input_ids"])
+            outputs = model(**batch, labels=batch["labels"])
             loss = outputs.loss
             total_test_loss += loss.item()
         avg_test_loss = total_test_loss / len(test_data_loader)
@@ -202,11 +214,11 @@ def train_ddp(batch_size, epochs, learning_rate, warmup_steps, run_name):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--batch_size", type=int, default=8, help="Batch size for training")
+    parser.add_argument("--batch_size", type=int, default=4, help="Batch size for training")
     parser.add_argument("--epochs", type=int, default=500, help="Number of epochs to train")
-    parser.add_argument("--learning_rate", type=float, default=5e-4, help="Learning rate for training")
+    parser.add_argument("--learning_rate", type=float, default=5e-5, help="Learning rate for training")
     parser.add_argument("--warmup_steps", type=int, default=1e4, help="Warmup steps for training")
-    parser.add_argument("--run_name", type=str, default="train_group", help="Run name for wandb")
+    parser.add_argument("--run_name", type=str, default="llm_train_group", help="Run name for wandb")
     args = parser.parse_args()
     train_ddp(args.batch_size, args.epochs, args.learning_rate, args.warmup_steps, args.run_name)
     
